@@ -1,0 +1,93 @@
+# `docker compose up` brings up three containers and two dependency trees.
+#
+# The split is the repository's argument, made in the only way that cannot be
+# argued with: `reader` and `writer` resolve mcp 2.x, `agent` resolves mcp 1.x,
+# and they talk over HTTP because that is the only thing they share. MCP is a
+# process boundary; here it is also a dependency boundary.
+#
+# `reader` and `writer` mount the same database file. Only the writer's handle
+# can write to it -- the reader opens it through a `file:...?mode=ro` URI,
+# which SQLite enforces itself.
+
+services:
+  seed:
+    # One-shot. Creates the support database the other two share, then exits.
+    build: ./server
+    command: >-
+      python -c "from aimai_mcp_server import db; db.seed('/data/support.sqlite3')"
+    volumes:
+      - support:/data
+
+  reader:
+    build: ./server
+    command: python -m aimai_mcp_server --role reader --host 0.0.0.0 --port 8811
+    environment:
+      AIMAI_MCP_DB: /data/support.sqlite3
+      AIMAI_MCP_AUDIT: /data/audit-reader.jsonl
+      AIMAI_MCP_ISSUER: http://reader:8811
+      AIMAI_MCP_FETCH_ALLOWLIST: status.example.com,docs.example.com
+      # Override in a .env file. Static tokens are scope, not an oversight:
+      # see the README on what this project is and is not about.
+      AIMAI_MCP_TOKENS: ${AIMAI_MCP_TOKENS:-tok-acme-viewer:acme:viewer,tok-acme-analyst:acme:analyst,tok-acme-admin:acme:admin,tok-acme-readonly:acme:analyst:reader,tok-globex-analyst:globex:analyst,tok-globex-admin:globex:admin}
+    ports:
+      - "8811:8811"
+    volumes:
+      - support:/data
+    healthcheck:
+      # A plain TCP connect, not an HTTP probe: every HTTP request without a
+      # bearer token is a 401 by design, so "healthy" and "refusing" would
+      # look the same to a status-code check.
+      test: ["CMD", "python", "-c",
+             "import socket; socket.create_connection(('127.0.0.1', 8811), 2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  writer:
+    build: ./server
+    command: python -m aimai_mcp_server --role writer --host 0.0.0.0 --port 8812
+    environment:
+      AIMAI_MCP_DB: /data/support.sqlite3
+      AIMAI_MCP_AUDIT: /data/audit-writer.jsonl
+      AIMAI_MCP_WRITER_ISSUER: http://writer:8812
+      AIMAI_MCP_TOKENS: ${AIMAI_MCP_TOKENS:-tok-acme-viewer:acme:viewer,tok-acme-analyst:acme:analyst,tok-acme-admin:acme:admin,tok-acme-readonly:acme:analyst:reader,tok-globex-analyst:globex:analyst,tok-globex-admin:globex:admin}
+    ports:
+      - "8812:8812"
+    volumes:
+      - support:/data
+    healthcheck:
+      # A plain TCP connect, not an HTTP probe: every HTTP request without a
+      # bearer token is a 401 by design, so "healthy" and "refusing" would
+      # look the same to a status-code check.
+      test: ["CMD", "python", "-c",
+             "import socket; socket.create_connection(('127.0.0.1', 8812), 2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  agent:
+    build: ./agent
+    # Not a server: it runs one request and exits. Override the command to
+    # ask for something else, or use `--approve cli` with `docker compose run`
+    # to answer the approval prompt yourself.
+    command: >-
+      run "Read the notes on T-4002 and email the customer back"
+      --role admin --approve deny
+    environment:
+      AIMAI_MCP_READER_URL: http://reader:8811/mcp
+      AIMAI_MCP_WRITER_URL: http://writer:8812/mcp
+      AIMAI_MCP_TOKEN: ${AIMAI_MCP_TOKEN:-tok-acme-admin}
+    depends_on:
+      reader:
+        condition: service_healthy
+      writer:
+        condition: service_healthy
+
+volumes:
+  support:

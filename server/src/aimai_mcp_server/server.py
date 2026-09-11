@@ -24,6 +24,7 @@ from typing import Annotated, Any, Literal
 from mcp.server import MCPServer
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
 from . import fetch as fetch_mod
@@ -258,7 +259,42 @@ def _register_writes(mcp: MCPServer, store: SupportStore) -> None:
         return {"changed": result.changed, **result.detail, "undo": None}
 
 
+def transport_security(role: ServerRole) -> TransportSecuritySettings:
+    """DNS-rebinding protection, configured for where this will actually run.
+
+    The SDK defaults to allowing `127.0.0.1` only, and rejects anything else
+    with **421 Misdirected Request**. That is the right default for a server
+    on a laptop and the first thing that breaks the moment there are two
+    containers: the agent connects to `http://reader:8811/mcp`, the Host
+    header says `reader:8811`, and the 421 arrives wrapped in an anyio
+    ExceptionGroup that says nothing about hostnames.
+
+    The protection is worth keeping rather than switching off -- it is what
+    stops a page in the operator's browser from resolving a name to 127.0.0.1
+    and driving this server. So the allowed set is configuration:
+    `AIMAI_MCP_ALLOWED_HOSTS=reader:8811,mcp.internal:443`.
+    """
+    raw = os.environ.get("AIMAI_MCP_ALLOWED_HOSTS")
+    if raw:
+        hosts = [h.strip() for h in raw.split(",") if h.strip()]
+    else:
+        # `:*` is the SDK's wildcard-port form. The service name is here so
+        # that docker compose works out of the box; a real deployment should
+        # set the variable and get an exact list.
+        hosts = ["127.0.0.1:*", "localhost:*", f"{role}:*"]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts,
+        allowed_origins=[
+            f"{scheme}://{host}" for host in hosts for scheme in ("http", "https")
+        ],
+    )
+
+
 def app_for(role: ServerRole):
     """ASGI app for uvicorn."""
     mcp, _, _ = build_server(role)
-    return mcp.streamable_http_app()
+    return mcp.streamable_http_app(
+        transport_security=transport_security(role),
+        host=os.environ.get("AIMAI_MCP_HOST", "127.0.0.1"),
+    )

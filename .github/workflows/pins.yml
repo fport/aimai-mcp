@@ -1,0 +1,30 @@
+name: Tool pins
+
+# A pin check that only runs on push answers "did the tools change in this
+# commit". The question worth asking is "did the tools change since the last
+# time anyone looked", and the server is someone else's deployment -- so this
+# runs on a schedule as well.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --group dev
+        working-directory: server
+      - run: uv sync --group dev
+        working-directory: agent
+
+      - name: Compare the live tools against the committed pins
+        run: uv run pytest ../security/test_tool_pins.py -c pyproject.toml
+        working-directory: agent

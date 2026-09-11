@@ -1,0 +1,62 @@
+{
+  "audit": {
+    "by_tool": {
+      "fetch_url": {
+        "calls": 1,
+        "error_rate": 1.0,
+        "p95_ms": 0.155
+      },
+      "grant_agent_access": {
+        "calls": 1,
+        "error_rate": 0.0,
+        "p95_ms": 0.678
+      },
+      "refund_invoice": {
+        "calls": 1,
+        "error_rate": 0.0,
+        "p95_ms": 0.562
+      },
+      "run_query": {
+        "calls": 50,
+        "error_rate": 0.04,
+        "p95_ms": 0.43
+      },
+      "send_customer_email": {
+        "calls": 1,
+        "error_rate": 0.0,
+        "p95_ms": 0.677
+      },
+      "update_ticket_status": {
+        "calls": 2,
+        "error_rate": 0.0,
+        "p95_ms": 1.106
+      }
+    },
+    "raw_values_in_log": 0,
+    "records": 248,
+    "tenants_seen": [
+      "acme",
+      "globex"
+    ],
+    "tool_calls": 56,
+    "truncated_results": 1
+  },
+  "runs": {
+    "approval_rate": 0.6,
+    "approval_requests": 5,
+    "approval_wait_p50_ms": 0.003,
+    "approval_wait_p95_ms": 0.005,
+    "approved": 3,
+    "denials_by_gate": {
+      "plan": 21,
+      "role": 2
+    },
+    "denied": 23,
+    "denied_ratio": 0.2987,
+    "detector_hits": 16,
+    "out_of_plan_calls": 0,
+    "proposals": 77,
+    "runs": 28,
+    "runs_split_into_legs": 3
+  }
+}

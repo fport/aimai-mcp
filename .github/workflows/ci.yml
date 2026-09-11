@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    # The mcp 2.x half, on its own, in its own environment.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --group dev
+      - name: Lint
+        run: uv run ruff check src/ tests/
+      - name: Format check
+        run: uv run ruff format --check src/ tests/
+      - run: uv run pytest
+
+  agent:
+    # The mcp 1.x half, plus the cross-process security suites -- which need
+    # the server's environment to exist, built from a lockfile this job never
+    # merges with its own. That is the arrangement under test.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Build the server environment (mcp 2.x)
+        run: uv sync --group dev
+        working-directory: server
+
+      - name: Build the agent environment (mcp 1.x)
+        run: uv sync --group dev
+        working-directory: agent
+
+      - name: The two environments really do resolve different majors
+        run: |
+          server_mcp=$(server/.venv/bin/python -c "import importlib.metadata as m; print(m.version('mcp'))")
+          agent_mcp=$(agent/.venv/bin/python -c "import importlib.metadata as m; print(m.version('mcp'))")
+          echo "server mcp $server_mcp / agent mcp $agent_mcp"
+          case "$server_mcp" in 2.*) ;; *) echo "server is not on mcp 2.x"; exit 1;; esac
+          case "$agent_mcp" in 1.*) ;; *) echo "agent is not on mcp 1.x"; exit 1;; esac
+
+      - name: Lint
+        run: uv run ruff check src/ tests/ ../security/ ../scripts/
+        working-directory: agent
+
+      - name: Format check
+        run: uv run ruff format --check src/ tests/ ../security/ ../scripts/
+        working-directory: agent
+
+      - name: Client and security tests
+        run: uv run pytest
+        working-directory: agent
+
+  claims:
+    # The headline claims are commands, not prose. They run here so a change
+    # that breaks one fails the build rather than being found by a reader.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --group dev
+        working-directory: server
+      - run: uv sync --group dev
+        working-directory: agent
+
+      - name: Trifecta build check
+        run: uv run aimai-mcp-trifecta
+        working-directory: agent
+
+      - name: Regenerate every measurement
+        run: uv run --project agent python scripts/measure.py
+
+      - name: Fail if a pinned measurement changed
+        # Only the deterministic files are diffed. Latency differs between
+        # machines; out-of-plan calls, denial counts and detector labels do
+        # not. `metrics.md` carries timings, so it is regenerated and not
+        # compared.
+        run: |
+          if ! git diff --quiet -- security/results/corpus.md; then
+            echo "The corpus results changed but the committed table was not updated:"
+            git diff -- security/results/corpus.md
+            exit 1
+          fi
+          python - <<'PY'
+          import json, sys
+          m = json.load(open("security/results/metrics.json"))
+          failures = []
+          if m["runs"]["out_of_plan_calls"] != 0:
+              failures.append(f"out-of-plan calls: {m['runs']['out_of_plan_calls']}")
+          if m["audit"]["raw_values_in_log"] != 0:
+              failures.append(f"raw values in the audit log: {m['audit']['raw_values_in_log']}")
+          if sorted(m["audit"]["tenants_seen"]) != ["acme", "globex"]:
+              failures.append("the measurement run stopped covering both tenants")
+          if failures:
+              print("\n".join(failures)); sys.exit(1)
+          print("claims hold")
+          PY
+
+  compose:
+    # Two images, two lockfiles, one network. `uv sync --frozen` in each
+    # Dockerfile fails loudly if anything ever drags the other major in.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bring the stack up and run one request through it
+        run: docker compose up --build --abort-on-container-exit --exit-code-from agent
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

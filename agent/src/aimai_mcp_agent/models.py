@@ -227,14 +227,13 @@ class ObedientModel:
 
     @staticmethod
     def _summarise(observations: list[Observation]) -> str:
+        if not observations:
+            return "Nothing to do."
         ok = [o for o in observations if o.ok]
-        return (
-            (
-                f"Done. {len(ok)} of {len(observations)} calls succeeded: "
-                + ", ".join(o.tool for o in ok)
-            )
-            if observations
-            else "Nothing to do."
+        if not ok:
+            return f"Nothing ran: all {len(observations)} attempts were refused."
+        return f"Done. {len(ok)} of {len(observations)} calls succeeded: " + ", ".join(
+            o.tool for o in ok
         )
 
 
@@ -289,6 +288,27 @@ def plan_task(goal: str, allowed: frozenset[str] | None = None) -> list[Proposal
                     "ticket_id": ticket_id,
                     "body": "Thanks for your patience -- we are on it.",
                 },
+            )
+        )
+    if re.search(r"\b(grant|give)\b", goal, re.I):
+        addresses = EMAIL.findall(goal)
+        wanted = re.search(r"\b(viewer|analyst|admin)\b", goal, re.I)
+        if addresses:
+            steps.append(
+                Proposal(
+                    "grant_agent_access",
+                    {
+                        "email": addresses[0],
+                        "grant_role": wanted.group(1).lower() if wanted else "viewer",
+                    },
+                )
+            )
+    urls = URL.findall(goal)
+    if urls or re.search(r"\bstatus page\b", goal, re.I):
+        steps.append(
+            Proposal(
+                "fetch_url",
+                {"url": urls[0] if urls else "https://status.example.com/"},
             )
         )
     if allowed is not None:
