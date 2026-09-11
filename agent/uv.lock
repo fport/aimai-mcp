@@ -13,6 +13,7 @@ name = "aimai-mcp-agent"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "mcp" },
 ]
 
@@ -24,7 +25,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mcp", specifier = ">=1.9,<2" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "mcp", specifier = ">=1.17,<2" },
+]
 
 [package.metadata.requires-dev]
 dev = [

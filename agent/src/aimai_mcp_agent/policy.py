@@ -152,6 +152,20 @@ def authorize(role: str, tool: str, args: dict[str, Any], plan: Plan) -> Decisio
             "for it.",
         )
 
+    # Still the plan, one level down. `run_query` is a single tool over seven
+    # queries, and an injected instruction that cannot add a tool is perfectly
+    # able to change which query is asked for.
+    if tool == "run_query":
+        query = args.get("query")
+        if query and not plan.permits_query(str(query)):
+            return _deny(
+                "plan",
+                f"the {query} query is not part of this run. This run may "
+                f"read: {', '.join(sorted(plan.allowed_queries))}. Which "
+                "queries a run may read was fixed from the user's request, "
+                "before anything was read.",
+            )
+
     rule = POLICY.get(tool)
     if rule is None:
         return _deny(

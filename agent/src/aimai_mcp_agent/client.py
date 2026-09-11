@@ -18,8 +18,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 from .catalog import server_of
 from .pinning import PinMismatch, ToolDescriptor, check_pins, load_pins
@@ -74,7 +75,27 @@ class ToolGateway:
     async def __aenter__(self) -> ToolGateway:
         self._stack = AsyncExitStack()
         await self._stack.__aenter__()
-        headers = {"Authorization": f"Bearer {self.token}"}
+        try:
+            return await self._connect()
+        except BaseException:
+            # A half-open stack has to be unwound here, in the task that
+            # opened it. anyio's cancel scopes are task-bound, so leaving it
+            # to the caller's `__aexit__` -- which never runs, because
+            # `__aenter__` raised -- surfaces as "exit cancel scope in a
+            # different task" and buries the real error.
+            await self.aclose()
+            raise
+
+    async def _connect(self) -> ToolGateway:
+        assert self._stack is not None
+        # The bearer token rides on the httpx client rather than on the call:
+        # mcp 1.x moved from `headers=` to `http_client=`, and owning the
+        # client is what lets the exit stack close it deterministically.
+        http_client = await self._stack.enter_async_context(
+            httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {self.token}"}, timeout=30.0
+            )
+        )
 
         targets = [("reader", self.reader_url)]
         if self.writer_url:
@@ -83,7 +104,7 @@ class ToolGateway:
         offered: list[ToolDescriptor] = []
         for role, url in targets:
             read, write, _ = await self._stack.enter_async_context(
-                streamablehttp_client(url, headers=headers)
+                streamable_http_client(url, http_client=http_client)
             )
             session = await self._stack.enter_async_context(ClientSession(read, write))
             await session.initialize()

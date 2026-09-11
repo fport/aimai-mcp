@@ -31,6 +31,13 @@ from .trifecta import split_for_trifecta, trifecta_check
 # Always available: naming the catalogue is how a step finds out what exists.
 BASE_TOOLS = frozenset({"list_queries", "run_query"})
 
+# Locking the tool set alone leaves a gap, and it is worth naming: `run_query`
+# is one tool with seven different blast radii behind it. A run allowed to
+# read open tickets and steered into reading the customer directory has not
+# called an out-of-plan *tool*, and an injected instruction is perfectly
+# capable of doing the steering. So the plan locks query names too.
+BASE_QUERIES = frozenset({"open_tickets", "search_tickets"})
+
 MAX_STEPS = 8
 
 # Intent -> the extra tools that intent justifies. A request that does not
@@ -56,6 +63,23 @@ INTENTS: tuple[tuple[str, frozenset[str]], ...] = (
     ),
 )
 
+# Same shape, one level down: which named queries this request justifies.
+QUERY_INTENTS: tuple[tuple[str, frozenset[str]], ...] = (
+    (
+        r"\b[A-Z]-\d{4}\b|\bnotes?\b|\bticket\b",
+        frozenset({"ticket_detail", "ticket_notes"}),
+    ),
+    (
+        r"\b(invoice|refund|overdue|charge|billing|INV-\d{4})\b",
+        frozenset({"invoice_detail", "overdue_invoices"}),
+    ),
+    (
+        r"\b(customer (list|directory|records|emails?)|all customers"
+        r"|contact details)\b",
+        frozenset({"customer_directory"}),
+    ),
+)
+
 
 class PlanLocked(RuntimeError):
     """Raised by any attempt to widen a plan after it was built."""
@@ -65,6 +89,7 @@ class PlanLocked(RuntimeError):
 class Plan:
     goal: str
     allowed: frozenset[str]
+    allowed_queries: frozenset[str] = BASE_QUERIES
     max_steps: int = MAX_STEPS
     # Set when this plan is one leg of a split run.
     leg: int = 0
@@ -78,6 +103,9 @@ class Plan:
 
     def permits(self, tool: str) -> bool:
         return tool in self.allowed
+
+    def permits_query(self, query: str) -> bool:
+        return query in self.allowed_queries
 
     def widen(self, *tools: str) -> Plan:
         """There is no widening. The method exists so the refusal is findable.
@@ -109,9 +137,16 @@ def build_plan(request: str, *, max_steps: int = MAX_STEPS) -> Plan:
         if re.search(pattern, text):
             allowed |= set(tools)
             matched.append(pattern)
+
+    queries = set(BASE_QUERIES)
+    for pattern, names in QUERY_INTENTS:
+        if re.search(pattern, request, re.IGNORECASE):
+            queries |= set(names)
+
     return Plan(
         goal=request.strip(),
         allowed=frozenset(allowed),
+        allowed_queries=frozenset(queries),
         max_steps=max_steps,
         matched_intents=tuple(matched),
     )

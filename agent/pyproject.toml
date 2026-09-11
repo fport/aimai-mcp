@@ -11,7 +11,10 @@ requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "fport" }]
 dependencies = [
-    "mcp>=1.9,<2",
+    # The floor is where `streamable_http_client(url, http_client=...)`
+    # landed; the ceiling is the point of the repo.
+    "mcp>=1.17,<2",
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
@@ -30,6 +33,7 @@ packages = ["src/aimai_mcp_agent"]
 
 [project.scripts]
 aimai-mcp-agent = "aimai_mcp_agent.run:main"
+aimai-mcp-trifecta = "aimai_mcp_agent.trifecta:main"
 
 [tool.pytest.ini_options]
 # `security/` drives this client against a live server in another process, so

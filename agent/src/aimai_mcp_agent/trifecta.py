@@ -117,3 +117,49 @@ def split_for_trifecta(tools: frozenset[str]) -> tuple[frozenset[str], ...]:
     for leg in legs:
         trifecta_check(leg)
     return legs
+
+
+def check_build() -> list[tuple[frozenset[str], tuple[frozenset[str], ...]]]:
+    """Every toolset this agent can ever assemble, checked before it runs.
+
+    Not a sample: the plan builder's intents are a fixed list, so the set of
+    reachable toolsets is a finite powerset and can be enumerated exactly.
+    Each one must either be trifecta-free or split into legs that are. A new
+    tool or a new intent that breaks that fails the build, which is the point
+    -- the alternative is discovering it in production, on the one request
+    that happened to combine them.
+
+    Returns the (toolset, legs) pairs so a caller can print what it checked.
+    """
+    from itertools import chain, combinations
+
+    from .plan import BASE_TOOLS, INTENTS
+
+    grants = [tools for _, tools in INTENTS]
+    checked: list[tuple[frozenset[str], tuple[frozenset[str], ...]]] = []
+    for size in range(len(grants) + 1):
+        for chosen in combinations(grants, size):
+            tools = frozenset(chain(BASE_TOOLS, *chosen))
+            legs = split_for_trifecta(tools)
+            for leg in legs:
+                # Raises TrifectaViolation, which is the failure mode.
+                trifecta_check(leg)
+            checked.append((tools, legs))
+    return checked
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`aimai-mcp-trifecta` -- the build check, as a command CI can run."""
+    import sys
+
+    try:
+        checked = check_build()
+    except TrifectaViolation as exc:
+        print(f"trifecta check FAILED: {exc}", file=sys.stderr)
+        return 1
+    split = sum(1 for _, legs in checked if len(legs) > 1)
+    print(
+        f"trifecta check ok: {len(checked)} reachable toolsets, "
+        f"{split} of them split into legs"
+    )
+    return 0
