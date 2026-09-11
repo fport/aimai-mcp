@@ -1,0 +1,21 @@
+# Not a package. The two real projects are `server/` and `agent/`, each with
+# its own pyproject and its own lockfile -- that separation is the point of
+# the repository and is not a workspace.
+#
+# This file exists so the documentation site has somewhere to declare its
+# tooling without attaching it to either half.
+[project]
+name = "aimai-mcp-docs"
+version = "0.1.0"
+description = "Documentation tooling for aimai-mcp"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocs-static-i18n>=1.2",
+]
+
+[tool.uv]
+package = false

@@ -3,6 +3,12 @@
 [![CI](https://github.com/fport/aimai-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/fport/aimai-mcp/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13-8FE64A)](server/pyproject.toml)
 [![License](https://img.shields.io/badge/license-MIT-8FE64A)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-fport.github.io-8FE64A)](https://fport.github.io/aimai-mcp/)
+
+**Documentation: [fport.github.io/aimai-mcp](https://fport.github.io/aimai-mcp/)**
+— the reasoning behind every decision, with the measurements. Available in
+[English](https://fport.github.io/aimai-mcp/) and
+[Türkçe](https://fport.github.io/aimai-mcp/tr/).
 
 An MCP server, an MCP client, and the security layer between them — as two
 processes with two different `mcp` versions, because that is what an MCP
