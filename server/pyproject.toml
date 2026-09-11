@@ -1,0 +1,46 @@
+# The server half. It needs mcp 2.x: `MCPServer`, the `ServerMiddleware`
+# tier the audit log hangs off, and the `TokenVerifier` hook the tenant
+# identity comes from. The agent half has its own pyproject next door and
+# resolves a different `mcp`; see the README for why that split is here.
+[project]
+name = "aimai-mcp-server"
+version = "0.1.0"
+description = "Schema-constrained MCP server: named queries, token-derived tenancy, audit middleware"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "fport" }]
+dependencies = [
+    "mcp>=2.2,<3",
+    "uvicorn[standard]>=0.32",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aimai_mcp_server"]
+
+[project.scripts]
+aimai-mcp-server = "aimai_mcp_server.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

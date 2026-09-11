@@ -1,0 +1,21 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.DS_Store
+
+# Local runtime artifacts: the seeded support database and anything a
+# measurement run wrote outside security/results/.
+data/
+*.sqlite3
+security/results/local-*
+
+# MkDocs build output
+site/
