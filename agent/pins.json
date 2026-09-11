@@ -1,0 +1,12 @@
+{
+  "server": "aimai-support",
+  "tools": {
+    "fetch_url": "sha256:5474fdab39ddde568de50c211e6a920b4e81a0c0617a7907d7f727a3c3cf8f67",
+    "grant_agent_access": "sha256:adf3baf5986f1d8437f39064e5656840ddbc4dd563558748a0ea889529f6ff5d",
+    "list_queries": "sha256:90a47df18f4c010af25d2d8139d91844b7204170dbfde8b152a1b26cd1852672",
+    "refund_invoice": "sha256:986fd90069b72cb58582f82b184c202310116a9ef70447b3a5bc3b68bd005782",
+    "run_query": "sha256:b6ea890e350b8a613d19be1e4b544df284b1f8e5f46192a7081440cbda594395",
+    "send_customer_email": "sha256:1b2687e1284d4de79f6623221b861690a9060a1f3025bdd1e1ad0ee928132e19",
+    "update_ticket_status": "sha256:6736b6c5d29365f7d07c8cd33896f3bb38035061af19c35ad226fcdda7df2bb6"
+  }
+}

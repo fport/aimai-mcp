@@ -1,0 +1,49 @@
+# The agent half, pinned to mcp 1.x on purpose. Agent runtimes lag the SDK,
+# and this repo's claim is that the lag does not matter: the wire protocol is
+# versioned, the Python API is not. A test in `security/` connects this 1.x
+# client to the 2.x server next door and fails if that stops being true.
+[project]
+name = "aimai-mcp-agent"
+version = "0.1.0"
+description = "Policy-gated MCP client: pinned tools, a locked plan, default-deny authorization"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "fport" }]
+dependencies = [
+    "mcp>=1.9,<2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aimai_mcp_agent"]
+
+[project.scripts]
+aimai-mcp-agent = "aimai_mcp_agent.run:main"
+
+[tool.pytest.ini_options]
+# `security/` drives this client against a live server in another process, so
+# those tests live with the client that runs them rather than in a third env.
+testpaths = ["tests", "../security"]
+addopts = "-q --strict-markers -m 'not live'"
+markers = [
+    "live: needs both servers running in their own environments",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

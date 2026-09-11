@@ -50,3 +50,18 @@ def test_a_handler_without_a_principal_raises_rather_than_defaulting():
     # misconfigured server into a silent cross-tenant read.
     with pytest.raises(Unauthenticated):
         current_principal()
+
+
+async def test_a_reader_scoped_token_does_not_open_the_writer():
+    table = parse_tokens("ro:acme:analyst:reader, rw:acme:analyst")
+    reader = StaticTokenVerifier(table, "http://x/mcp", server="reader")
+    writer = StaticTokenVerifier(table, "http://y/mcp", server="writer")
+
+    assert await reader.verify_token("ro") is not None
+    assert await writer.verify_token("ro") is None
+    assert await writer.verify_token("rw") is not None
+
+
+def test_a_token_naming_an_unknown_server_is_a_configuration_error():
+    with pytest.raises(ValueError, match="unknown servers"):
+        parse_tokens("a:acme:analyst:reader+database")

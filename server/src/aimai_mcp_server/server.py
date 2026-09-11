@@ -67,7 +67,7 @@ def build_server(
     raw_sink = RawArgumentSink(raw_path) if raw_path else None
 
     issuer_url, resource_url = _issuer(role)
-    verifier = StaticTokenVerifier(tokens_from_env(), resource_url)
+    verifier = StaticTokenVerifier(tokens_from_env(), resource_url, server=role)
 
     mcp = MCPServer(
         name=f"aimai-support-{role}",
@@ -83,8 +83,10 @@ def build_server(
             issuer_url=issuer_url,
             resource_server_url=resource_url,
             required_scopes=[],
-            # Without this a token minted for the reader also opens the
-            # writer, and the two-server split stops meaning anything.
+            # Refuses a token minted for another resource. The narrower
+            # rule -- which of *these two* servers a token opens -- is in
+            # the token table, because both servers here mint their own
+            # resource claim and an audience check alone would pass.
             validate_token_resource=True,
         ),
         middleware=[AuditMiddleware(log, raw_sink=raw_sink)],

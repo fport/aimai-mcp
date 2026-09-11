@@ -22,11 +22,16 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 # Ordered from least to most authority; `Principal.at_least` uses the index.
 ROLES = ("viewer", "analyst", "admin")
+SERVERS = ("reader", "writer")
 
+# `token:tenant:role` opens both servers; a fourth field narrows it. The
+# read-only token below is what a reporting job or a dashboard would get, and
+# it is refused by the writer at the token check -- before any policy runs.
 DEFAULT_TOKENS = (
     "tok-acme-viewer:acme:viewer,"
     "tok-acme-analyst:acme:analyst,"
     "tok-acme-admin:acme:admin,"
+    "tok-acme-readonly:acme:analyst:reader,"
     "tok-globex-analyst:globex:analyst,"
     "tok-globex-admin:globex:admin"
 )
@@ -36,13 +41,14 @@ DEFAULT_TOKENS = (
 class Principal:
     tenant: str
     role: str
+    servers: frozenset[str] = frozenset(SERVERS)
 
     def at_least(self, role: str) -> bool:
         return ROLES.index(self.role) >= ROLES.index(role)
 
 
 def parse_tokens(raw: str) -> dict[str, Principal]:
-    """Parse `token:tenant:role,...` into a lookup table.
+    """Parse `token:tenant:role[:servers],...` into a lookup table.
 
     Raises on a malformed entry rather than skipping it. A typo in the token
     table that silently drops an entry shows up much later as "the server
@@ -54,14 +60,25 @@ def parse_tokens(raw: str) -> dict[str, Principal]:
         if not entry:
             continue
         parts = entry.split(":")
-        if len(parts) != 3:
-            raise ValueError(f"token entry {entry!r} is not token:tenant:role")
-        token, tenant, role = (p.strip() for p in parts)
+        if len(parts) not in (3, 4):
+            raise ValueError(
+                f"token entry {entry!r} is not token:tenant:role[:servers]"
+            )
+        token, tenant, role = (p.strip() for p in parts[:3])
+        servers = frozenset(SERVERS)
+        if len(parts) == 4:
+            servers = frozenset(s.strip() for s in parts[3].split("+") if s.strip())
+            unknown = servers - set(SERVERS)
+            if unknown or not servers:
+                raise ValueError(
+                    f"token entry {entry!r} names unknown servers: "
+                    f"{', '.join(sorted(unknown)) or '(none)'}"
+                )
         if role not in ROLES:
             raise ValueError(f"token entry {entry!r} has unknown role {role!r}")
         if not token or not tenant:
             raise ValueError(f"token entry {entry!r} has an empty token or tenant")
-        table[token] = Principal(tenant=tenant, role=role)
+        table[token] = Principal(tenant=tenant, role=role, servers=servers)
     if not table:
         raise ValueError("no tokens configured; set AIMAI_MCP_TOKENS")
     return table
@@ -79,13 +96,21 @@ class StaticTokenVerifier(TokenVerifier):
     them is how "scope: tenant:acme" ends up being requestable.
     """
 
-    def __init__(self, table: dict[str, Principal], resource_url: str) -> None:
+    def __init__(
+        self, table: dict[str, Principal], resource_url: str, server: str = "reader"
+    ) -> None:
         self._table = table
         self._resource_url = resource_url
+        self._server = server
 
     async def verify_token(self, token: str) -> AccessToken | None:
         principal = self._table.get(token)
         if principal is None:
+            return None
+        # A token scoped to the reader is not a token for the writer. Checked
+        # here rather than in the policy layer: the writer should not learn
+        # anything about a caller it will not serve.
+        if self._server not in principal.servers:
             return None
         return AccessToken(
             token=token,
