@@ -40,6 +40,13 @@ jobs:
 
   deploy:
     needs: build
+    # Pages is not available on a private repository without a paid plan, and
+    # `deploy-pages` fails with a bare 404 when it is off -- which would paint
+    # this workflow red on every docs commit for a reason that is not a
+    # problem with the docs. The build job above still runs and still fails on
+    # a broken link, so nothing goes unchecked. Flip the repository to public
+    # and this job starts deploying on the next push, with no edit here.
+    if: github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
